@@ -34,14 +34,13 @@ def download_pdf(url,file_name):
     # url = "http://pg.jrj.com.cn/acc/Res/CN_RES/FUTURES/2018/3/1/4ae0f0c1-72c1-441c-8315-f21f6366216a.pdf"
     print "pdf url ",url
     # file_name = get_pdf_path() + "\\research_report_pdf\\" + file_name
-    print "file_name",file_name
+    # print "file_name",file_name
     page = get_page(url)
     if page == '':
         print ("faild to download" + " " + file_name)
         return False
     else:
         f = open(file_name, 'wb')
-
         block_sz = 8192
         while True:
             buffer = page.read(block_sz)
@@ -50,23 +49,25 @@ def download_pdf(url,file_name):
             f.write(buffer)
         f.close()
         print ("Sucessful to download" + " " + file_name)
-        time.sleep(3)
         return True
 
 from PyPDF2 import PdfFileReader, PdfFileWriter
 #获取文件页数，文件大小
 def reload_pdf(file_name):
     # 获取一个 PdfFileReader 对象
+    page_count = 0
+    file_size = 0
     try:
         pdf_input = PdfFileReader(open(file_name, 'rb'))
         # 获取 PDF 的页数
         page_count = pdf_input.getNumPages()
-        print "page_count:",page_count
-        file_size = get_FileSize(file_name)
-        print "file_size:",file_size
-        return page_count,file_size
     except:
-        return 0,0
+        page_count = 0
+    try:
+        file_size = get_FileSize(file_name)
+    except:
+        file_size = 0
+    return page_count,file_size
 
 def get_FileSize(filePath):
     # filePath = unicode(filePath,'utf8')

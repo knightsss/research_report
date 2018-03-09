@@ -62,14 +62,16 @@ def get_article_url_list(base_url):
             a_element = elem.find('a')
             if a_element != None:
                 elem_dict['title'] = unicode(a_element['title']).encode('utf-8')
+                # print "elem_dict['title']   ",type(elem_dict['title'])
                 report_organization, report_title = zhongwen_cute(elem_dict['title'])
                 elem_dict['report_organization'] = report_organization
                 elem_dict['report_title'] = report_title
-                elem_dict['url'] = a_element['href']
+                elem_dict['url'] = a_element['href'].encode('utf-8')
                 elem_dict['time'] = unicode(elem.find('span').string).encode('utf-8')
                 elem_dict['report_date'] = elem_dict['time'].split(' ')[0].replace('-','')
-                elem_dict['file_name'] = 'qsyb' + str(elem_dict['report_date']) + '#' + elem_dict['url'][-12:-5] + '.pdf'
+                elem_dict['file_name'] = 'qsyb' + str(elem_dict['report_date']) + '#' + elem_dict['url'][-12:-5]
                 elem_dict['report_id'] = str(elem_dict['report_date']) + elem_dict['url'][-12:-5]
+                # print "elem_dict['report_id']:",type(elem_dict['report_id'])
                 base_url_list.append(elem_dict)
             # print a_element['title']
     return change_list(base_url_list)
@@ -84,11 +86,13 @@ def get_report_message(report_url):
         pass
     else:
         try:
-            soup = BeautifulSoup(article_html,"html.parser")
+            # soup = BeautifulSoup(article_html,"html.parser")
+            soup = BeautifulSoup(article_html,"html5lib")
             main_element = soup.find(class_='main')
             main_content =  main_element.find('div').strings
             contents = ''
             for content in main_content:
+                # print "type content ",type(content)
                 contents = contents + content
 
             pdf_url = main_element.find('a')['href']
@@ -99,7 +103,9 @@ def get_report_message(report_url):
         # print "contents:",contents
         # print "pdf_url:",main_element.find('a')['href']
         # print "pdf_name:",main_element.find('a').string
-    return pdf_url,pdf_name,contents
+        # print "type contents 1 ",type(contents)
+        # print "type contents 2 ",type(contents.encode('utf-8'))
+    return pdf_url,pdf_name,contents.encode('utf-8')
 
 #测试使用
 def spider_report_control(interval,flag):
@@ -119,9 +125,13 @@ def change_list(array_list):
     return new_array_list
 
 def zhongwen_cute(words):
-    report_word = words.split('--')
-    report_organization = report_word[0]
-    report_title = report_word[1].split('【')[0]
+    try:
+        report_word = words.split('--')
+        report_organization = report_word[0]
+        report_title = report_word[1].split('【')[0]
+    except:
+        report_organization = ''
+        report_title = ''
     # print "report_organization:",report_organization
     # print "report_title:",report_title
     return report_organization, report_title

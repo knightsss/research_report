@@ -7,7 +7,7 @@ import datetime
 from research_report.spider_report import spider_report_control,get_page_count,get_article_url_list,get_report_message
 from research_report.base_data_message import get_base_report_type_url
 from report_pdf import download_pdf,reload_pdf
-from db_connect.db_mysql import mysql_connect,insert_mysql_t_finance_report
+from db_connect.db_mysql import mysql_connect,insert_mysql_t_finance_report,get_mysql_record
 class Spider(threading.Thread):
     # __metaclass__ = Singleton
     thread_stop = False
@@ -58,6 +58,10 @@ def loaddata(c_thread,thread_num,interval):
         base_report_type_url_list = get_base_report_type_url()
         report_class_len = len(base_report_type_url_list)
         report_class_index = 0
+
+        #连接mysql
+        mysql_conn = mysql_connect()
+
         while ((report_class_index < report_class_len) and (not c_thread.thread_stop)):
             # print "test..."
             # current_date = time.strftime("%Y%m%d %H:%M:%S", time.localtime())
@@ -72,12 +76,11 @@ def loaddata(c_thread,thread_num,interval):
             if page_count>0:
                 #查询mysql
                 #访问mysql  获取mysql总记录数,条件 报告类型：券商晨会 report_type 或者id
-                mysql_count = 49
-                last_time = '2010-03-06 12:34:44'
-
+                mysql_count,last_publish_date = get_mysql_record(mysql_conn,base_report_type_url_list[report_class_index]['report_type_id'])
+                print "mysql_count:",mysql_count
                 #构造起始页码
                 start_page_number = int(page_count - math.floor((mysql_count)/50))
-                print start_page_number
+                print "start_page_number:",start_page_number
                 #构造page_url,总共需要访问多少页
                 page_url_list = []
                 for i in range(start_page_number):
@@ -91,6 +94,8 @@ def loaddata(c_thread,thread_num,interval):
                 while ((page_url_index<page_url_list_len) and (not c_thread.thread_stop)):
                     page_url = page_url_list[page_url_index]
                     print "page_url:",page_url
+                    # #测试
+                    # page_url = 'http://istock.jrj.com.cn/yanbao_1_p648.html'
                     report_element_list = get_article_url_list(page_url)
                     #网络异常的时候 report_url_list为空
                     if len(report_element_list) == 0:
@@ -100,42 +105,59 @@ def loaddata(c_thread,thread_num,interval):
                         print "========================================="
                         print "report_element_list len:",len(report_element_list)
                         for report_element in report_element_list:
-                            print "report_url:", report_element['url']
-                            #通过report 地址获取详细信息
-                            pdf_url,pdf_name,contents = get_report_message(report_element['url'])
-                            #出现异常,pdf_url为空
-                            if pdf_url != '':
-                                #判断下载pdf是否异常，异常跳过
-                                download_result = download_pdf(pdf_url,report_element['file_name'])
-                                if download_result:
-                                    page_count,file_size = reload_pdf(report_element['file_name'])
-                                    if page_count == 0 and file_size == 0:
-                                        print "file error!"
-                                    else:
-                                        print "insert into mysql"
-                                        mysql_conn = mysql_connect()
-                                        print "mysql connect ok"
-                                        report_id = report_element['report_id']
-                                        publish_date = report_element['report_date']
-                                        report_type_id = base_report_type_url_list[report_class_index]['report_type_id']
-                                        report_type = base_report_type_url_list[report_class_index]['report_type']
-                                        report_title = report_element['report_title']
-                                        report_organization = report_element['report_organization']
-                                        file_size = file_size
-                                        page_count = page_count
-                                        file_url = report_element['url']
-                                        report_content = contents
-                                        file_local_path = report_element['file_name']
-                                        insert_mysql_t_finance_report(mysql_conn,report_id, publish_date, report_type_id, report_type, report_title,report_organization, file_size, page_count, file_url, report_content, file_local_path)
-                                        print "insert sucess!"
-                                        #存储mysql数据库
-                            else:
-                                print "get content error"
-                            # print "pdf_url:",pdf_url
-                            # print "pdf_name:",pdf_name
-                            # print "contents:",contents
-                            time.sleep(1)
+                            if(not c_thread.thread_stop):
+                                #判断时间是否已经采集过
+                                print "last_publish_date: ",last_publish_date, "time: ",datetime.datetime.strptime(report_element['time'], "%Y-%m-%d %H:%M:%S")
+                                if last_publish_date > datetime.datetime.strptime(report_element['time'], "%Y-%m-%d %H:%M:%S"):
+                                    print report_element['url']," exists"
+                                else:
+                                    print "report_url:", report_element['url']
+                                    #通过report 地址获取详细信息
+                                    pdf_url,pdf_name,contents = get_report_message(report_element['url'])
+                                    # pdf_url,pdf_name,contents = get_report_message('http://istock.jrj.com.cn/article,yanbao,24587410.html')
+                                    #出现异常,pdf_url为空
+                                    if pdf_url != '':
+                                        #判断下载pdf是否异常，异常跳过
+                                        file_name = report_element['file_name'] + '.'+ (pdf_url.split('.')[-1]).encode('utf-8')
 
+                                        # print "file_name:",file_name
+                                        # print "file_name:",type(file_name)
+                                        download_result = download_pdf(pdf_url,file_name)
+                                        if download_result:
+                                            page_count,file_size = reload_pdf(file_name)
+                                            #判断打开文件是否异常
+                                            if page_count == 0 and file_size == 0:
+                                                print "file load error!"
+                                            else:
+                                                print "insert into mysql"
+
+                                                #判断mysql连接是否异常
+                                                if mysql_conn == 0:
+                                                    print "mysql connect error, exit!"
+                                                    c_thread.thread_stop = True
+                                                else:
+                                                    report_id = report_element['report_id']
+                                                    publish_date = report_element['time']
+                                                    report_type_id = base_report_type_url_list[report_class_index]['report_type_id']
+                                                    report_type = base_report_type_url_list[report_class_index]['report_type']
+                                                    report_title = report_element['report_title']
+                                                    report_organization = report_element['report_organization']
+                                                    file_size = file_size
+                                                    page_count = page_count
+                                                    file_url = report_element['url']
+                                                    report_content = contents
+                                                    file_local_path = file_name
+                                                    insert_mysql_t_finance_report(mysql_conn,report_id, publish_date, report_type_id, report_type, report_title,report_organization, file_size, page_count, file_url, report_content, file_local_path)
+                                                    print "insert sucess!"
+                                                #存储mysql数据库
+                                        else:
+                                            print "download error"
+                                    else:
+                                        print "get content error"
+                            else:
+                                print "spider stop ...."
+                                break
+                            # time.sleep(1)
 
                     page_url_index = page_url_index + 1
                     time.sleep(3)
@@ -144,9 +166,6 @@ def loaddata(c_thread,thread_num,interval):
             else:
                 print base_report_type_url," get page count error"
 
-
             report_class_index = report_class_index + 1
 
-
     print "exit!"
-    #time.sleep(10)
